@@ -50,7 +50,7 @@ public:
         // TODO: test this bc I think it's not technically in the spec
         auto param_list = std::vector<lsp::LSPAny>{params};
         auto ex_params = lsp::ExecuteCommandParams{.command = name, .arguments = param_list};
-        lsp::sendNotification("workspace/executeCommand", rfl::to_generic(ex_params));
+        lsp::sendNotification("workspace/executeCommand", ex_params);
     }
     /// The `workspace/workspaceFolders` is sent from the server to the client to fetch the open
     /// workspace folders.
@@ -132,7 +132,7 @@ public:
     /// The show message notification is sent from a server to a client to ask
     /// the client to display a particular message in the user interface.
     virtual void onWindowShowMessage(const ShowMessageParams& params) {
-        sendNotification("window/showMessage", rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("window/showMessage", params);
     };
 
     /// A request to show a document. This request might open an
@@ -148,25 +148,23 @@ public:
     /// The log message notification is sent from the server to the client to ask
     /// the client to log a particular message.
     void onWindowLogMessage(const LogMessageParams& params) {
-        sendNotification("window/logMessage", rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("window/logMessage", params);
     };
 
     /// Diagnostics notification are sent from the server to the client to signal
     /// results of validation runs.
     virtual void onDocPublishDiagnostics(const PublishDiagnosticsParams& params) {
-        sendNotification("textDocument/publishDiagnostics",
-                         rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("textDocument/publishDiagnostics", params);
     };
 
     virtual void onTextDocumentInactiveRegions(const InactiveRegionsParams& params) {
-        sendNotification("textDocument/inactiveRegions",
-                         rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("textDocument/inactiveRegions", params);
     }
 
     /// The telemetry event notification is sent from the server to the client to ask
     /// the client to log telemetry data.
     void onTelemetryEvent(const LSPAny& params) {
-        sendNotification("telemetry/event", rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("telemetry/event", params);
     };
 
     /// The `client/unregisterCapability` request is sent from the server to the client to
@@ -182,30 +180,30 @@ public:
     }
 
     void onProgress(const ProgressParams& params) {
-        sendNotification("$/progress", rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("$/progress", params);
     };
 
     void onLogTrace(const LogTraceParams& params) {
-        sendNotification("$/logTrace", rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("$/logTrace", params);
     };
 
     void onCancelRequest(const CancelParams& params) {
-        sendNotification("$/cancelRequest", rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendNotification<rfl::UnderlyingEnums>("$/cancelRequest", params);
     };
 
     // TODO -- generate this, also actually handle responses from the client -- maybe async / await
     virtual void onShowDocument(const ShowDocumentParams& params) {
-        sendRequest("window/showDocument", rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendRequest<rfl::UnderlyingEnums>("window/showDocument", params);
     };
 
     /// Ask the client to refresh all inlay hints.
     virtual void onWorkspaceInlayHintRefresh(std::monostate params = {}) {
-        sendRequest("workspace/inlayHint/refresh", rfl::to_generic(params));
+        sendRequest("workspace/inlayHint/refresh", params);
     }
 
     /// Ask the client to refresh all code lenses.
     virtual void onWorkspaceCodeLensRefresh(std::monostate params = {}) {
-        sendRequest("workspace/codeLens/refresh", rfl::to_generic(params));
+        sendRequest("workspace/codeLens/refresh", params);
     }
 };
 } // namespace lsp

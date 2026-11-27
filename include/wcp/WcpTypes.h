@@ -9,22 +9,14 @@
 
 #pragma once
 
-#include "rfl/TaggedUnion.hpp"
+#include <rfl/Flatten.hpp>
+#include <rfl/TaggedUnion.hpp>
 #include <string>
 #include <vector>
 
 namespace wcp {
 using VariablePath = std::string;
 using ScopePath = std::string;
-
-struct Message {
-    std::string type;
-};
-
-struct Event {
-    using Tag = rfl::Literal<"event">;
-    std::string event;
-};
 
 struct Greeting {
     std::string type;
@@ -60,26 +52,29 @@ struct AddItems {
 
 struct WaveformsLoaded {
     using Tag = rfl::Literal<"waveforms_loaded">;
-    std::string type;
     std::string source;
 };
 
 struct GotoDeclaration {
     using Tag = rfl::Literal<"goto_declaration">;
-    std::string type;
     std::string variable;
 };
 
 struct AddDrivers {
     using Tag = rfl::Literal<"add_drivers">;
-    std::string type;
     std::string variable;
 };
 
 struct AddLoads {
     using Tag = rfl::Literal<"add_loads">;
-    std::string type;
     std::string variable;
+};
+
+using S2CEvent = rfl::TaggedUnion<"event", WaveformsLoaded, GotoDeclaration, AddDrivers, AddLoads>;
+
+struct Event {
+    using Tag = rfl::Literal<"event">;
+    rfl::Flatten<S2CEvent> payload;
 };
 
 struct Response {
@@ -88,6 +83,5 @@ struct Response {
 };
 
 using S2CMessage = rfl::TaggedUnion<"type", Response, Event>;
-using S2CEvent = rfl::TaggedUnion<"event", WaveformsLoaded, GotoDeclaration, AddDrivers, AddLoads>;
 
 } // namespace wcp

@@ -18,7 +18,7 @@
 
 #include "slang/util/OS.h"
 
-static int CONFIG_READ_FLAGS = YYJSON_READ_ALLOW_COMMENTS | YYJSON_READ_ALLOW_TRAILING_COMMAS;
+static constexpr auto CONFIG_READ_FLAGS = rfl::json::jsonc;
 
 namespace fs = std::filesystem;
 

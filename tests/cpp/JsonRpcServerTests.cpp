@@ -13,10 +13,15 @@ struct CancelParams {
     lsp::ID_t id;
 };
 
+struct EchoParams {
+    std::string text;
+};
+
 class TestJsonRpcServer : public lsp::JsonRpcServer<TestJsonRpcServer> {
 public:
     TestJsonRpcServer() {
         registerMethod<std::nullopt_t, int, &TestJsonRpcServer::succeedRequest>("success");
+        registerMethod<EchoParams, std::string, &TestJsonRpcServer::echoRequest>("echo");
         registerMethod<std::nullopt_t, int, &TestJsonRpcServer::failRequest>("fail");
         registerMethod<std::nullopt_t, int, &TestJsonRpcServer::limitedRequest>("limited");
         registerMethod<std::nullopt_t, int, &TestJsonRpcServer::contextRequest>("context");
@@ -35,6 +40,8 @@ public:
     }
 
     int succeedRequest(std::monostate) { return 42; }
+
+    std::string echoRequest(const EchoParams& params) { return params.text; }
 
     int failRequest(std::monostate) { throw std::runtime_error("failed"); }
 
@@ -200,7 +207,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .params = std::nullopt,
         });
 
-        CHECK(std::holds_alternative<rfl::Generic>(result));
+        CHECK(std::holds_alternative<rfl::json::Raw>(result));
+        CHECK(std::get<rfl::json::Raw>(result).str() == "42");
         CHECK(std::regex_match(
             capture.str(),
             std::regex(
@@ -274,7 +282,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .params = std::nullopt,
         });
 
-        CHECK(std::holds_alternative<rfl::Generic>(result));
+        CHECK(std::holds_alternative<rfl::json::Raw>(result));
+        CHECK(std::get<rfl::json::Raw>(result).str() == "42");
         CHECK(std::regex_match(
             capture.str(),
             std::regex(
@@ -328,7 +337,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .params = std::nullopt,
         });
 
-        CHECK(std::holds_alternative<rfl::Generic>(result));
+        CHECK(std::holds_alternative<rfl::json::Raw>(result));
+        CHECK(std::get<rfl::json::Raw>(result).str() == "null");
         CHECK(std::regex_match(
             capture.str(),
             std::regex(
@@ -348,7 +358,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .jsonrpc = "2.0",
             .id = std::nullopt,
             .method = "$/cancelRequest",
-            .params = rfl::to_generic<rfl::UnderlyingEnums>(CancelParams{.id = 11}),
+            .params = rfl::json::Raw{
+                rfl::json::write<rfl::UnderlyingEnums>(CancelParams{.id = 11})},
         });
         CHECK(std::holds_alternative<std::nullopt_t>(cancelResult));
         CHECK(ctx.isCancelled());
@@ -378,7 +389,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .jsonrpc = "2.0",
             .id = std::nullopt,
             .method = "$/cancelRequest",
-            .params = rfl::to_generic<rfl::UnderlyingEnums>(CancelParams{.id = 14}),
+            .params = rfl::json::Raw{
+                rfl::json::write<rfl::UnderlyingEnums>(CancelParams{.id = 14})},
         });
         CHECK(ctx.isCancelled());
         CHECK(std::regex_match(
@@ -407,7 +419,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .jsonrpc = "2.0",
             .id = std::nullopt,
             .method = "$/cancelRequest",
-            .params = rfl::to_generic<rfl::UnderlyingEnums>(CancelParams{.id = 15}),
+            .params = rfl::json::Raw{
+                rfl::json::write<rfl::UnderlyingEnums>(CancelParams{.id = 15})},
         });
         CHECK_FALSE(ctx.isCancelled());
         CHECK(std::regex_match(
@@ -422,7 +435,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .jsonrpc = "2.0",
             .id = std::nullopt,
             .method = "$/cancelRequest",
-            .params = rfl::to_generic<rfl::UnderlyingEnums>(CancelParams{.id = 404}),
+            .params = rfl::json::Raw{
+                rfl::json::write<rfl::UnderlyingEnums>(CancelParams{.id = 404})},
         });
 
         CHECK(std::holds_alternative<std::nullopt_t>(result));
@@ -452,7 +466,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .jsonrpc = "2.0",
             .id = std::nullopt,
             .method = "$/cancelRequest",
-            .params = rfl::to_generic<rfl::UnderlyingEnums>(CancelParams{.id = 12}),
+            .params = rfl::json::Raw{
+                rfl::json::write<rfl::UnderlyingEnums>(CancelParams{.id = 12})},
         });
         CHECK(numericContext.isCancelled());
         CHECK_FALSE(stringContext.isCancelled());
@@ -461,7 +476,8 @@ TEST_CASE("JSON-RPC messages log their latency") {
             .jsonrpc = "2.0",
             .id = std::nullopt,
             .method = "$/cancelRequest",
-            .params = rfl::to_generic<rfl::UnderlyingEnums>(CancelParams{.id = std::string("12")}),
+            .params = rfl::json::Raw{
+                rfl::json::write<rfl::UnderlyingEnums>(CancelParams{.id = std::string("12")})},
         });
         CHECK(stringContext.isCancelled());
 
@@ -481,7 +497,7 @@ TEST_CASE("JSON-RPC messages log their latency") {
                 .jsonrpc = "2.0",
                 .id = std::nullopt,
                 .method = "textDocument/didChange",
-                .params = rfl::to_generic<rfl::UnderlyingEnums>(params),
+                .params = rfl::json::Raw{rfl::json::write<rfl::UnderlyingEnums>(params)},
             };
         };
 
@@ -506,5 +522,77 @@ TEST_CASE("JSON-RPC messages log their latency") {
         server.untrack(first, firstContext);
         server.untrack(second, secondContext);
         server.untrack(other, otherContext);
+    }
+}
+
+TEST_CASE("JSON-RPC maps rfl::ErrorKind to standard error codes") {
+    TestJsonRpcServer server;
+    LogCapture capture;
+
+    SECTION("valid Raw params round-trip without Generic DOM") {
+        auto result = server.processMessage({
+            .jsonrpc = "2.0",
+            .id = 20,
+            .method = "echo",
+            .params = rfl::json::Raw{R"({"text":"hello"})"},
+        });
+        REQUIRE(std::holds_alternative<rfl::json::Raw>(result));
+        CHECK(std::get<rfl::json::Raw>(result).str() == R"("hello")");
+    }
+
+    SECTION("missing or mistyped params return InvalidParams (-32602)") {
+        auto missing = server.processMessage({
+            .jsonrpc = "2.0",
+            .id = 21,
+            .method = "echo",
+            .params = std::nullopt,
+        });
+        REQUIRE(std::holds_alternative<lsp::RpcError>(missing));
+        CHECK(std::get<lsp::RpcError>(missing).code ==
+              static_cast<int>(lsp::ErrorCodes::InvalidParams));
+
+        auto missingField = server.processMessage({
+            .jsonrpc = "2.0",
+            .id = 22,
+            .method = "echo",
+            .params = rfl::json::Raw{R"({})"},
+        });
+        REQUIRE(std::holds_alternative<lsp::RpcError>(missingField));
+        CHECK(std::get<lsp::RpcError>(missingField).code ==
+              static_cast<int>(lsp::ErrorCodes::InvalidParams));
+
+        auto wrongType = server.processMessage({
+            .jsonrpc = "2.0",
+            .id = 23,
+            .method = "echo",
+            .params = rfl::json::Raw{R"({"text":123})"},
+        });
+        REQUIRE(std::holds_alternative<lsp::RpcError>(wrongType));
+        CHECK(std::get<lsp::RpcError>(wrongType).code ==
+              static_cast<int>(lsp::ErrorCodes::InvalidParams));
+    }
+
+    SECTION("readJson distinguishes ParseError (-32700) from InvalidRequest (-32600)") {
+        auto frame = [](std::string_view message) {
+            return fmt::format("Content-Length: {}\r\n\r\n{}", message.size(), message);
+        };
+        std::istringstream input(frame("{malformed") + frame(R"({"id":1})"));
+        std::ostringstream output;
+        const auto originalInState = std::cin.rdstate();
+        auto* originalIn = std::cin.rdbuf(input.rdbuf());
+        auto* originalOut = std::cout.rdbuf(output.rdbuf());
+        slang::ScopeGuard restore([&] {
+            std::cin.rdbuf(originalIn);
+            std::cin.clear(originalInState);
+            std::cout.rdbuf(originalOut);
+        });
+
+        std::string line;
+        std::string content;
+        CHECK_FALSE(lsp::readJson<lsp::RpcRequest>(line, content).has_value());
+
+        const std::string wire = output.str();
+        CHECK(wire.find(R"("code":-32700)") != std::string::npos);
+        CHECK(wire.find(R"("code":-32600)") != std::string::npos);
     }
 }
