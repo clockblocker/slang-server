@@ -3,8 +3,11 @@
 
 #include "lsp/LspTypes.h"
 #include "utils/ServerHarness.h"
+#include "wcp/WcpTypes.h"
 #include <filesystem>
 #include <optional>
+#include <rfl/NoExtraFields.hpp>
+#include <rfl/json.hpp>
 
 namespace fs = std::filesystem;
 
@@ -149,5 +152,63 @@ TEST_CASE("WCP Tests") {
 
     SECTION("Is Var Slice") {
         CHECK(server.m_driver->comp->isWcpVariable("test.the_other_sub.the_array[4]"));
+    }
+}
+
+TEST_CASE("WCP S2CMessage parses and round-trips nested TaggedUnion in a single pass") {
+    SECTION("WaveformsLoaded event") {
+        const std::string wire =
+            R"({"type":"event","event":"waveforms_loaded","source":"sim/top.vcd"})";
+        auto parsed = rfl::json::read<wcp::S2CMessage, rfl::NoExtraFields>(wire);
+        REQUIRE(parsed);
+        const auto* event = rfl::get_if<wcp::Event>(&parsed->variant());
+        REQUIRE(event);
+        const auto* loaded = rfl::get_if<wcp::WaveformsLoaded>(&event->payload.get().variant());
+        REQUIRE(loaded);
+        CHECK(loaded->source == "sim/top.vcd");
+        CHECK(rfl::json::write(*parsed) == wire);
+    }
+
+    SECTION("GotoDeclaration event") {
+        const std::string wire =
+            R"({"type":"event","event":"goto_declaration","variable":"top.dut.sig"})";
+        auto parsed = rfl::json::read<wcp::S2CMessage, rfl::NoExtraFields>(wire);
+        REQUIRE(parsed);
+        const auto* event = rfl::get_if<wcp::Event>(&parsed->variant());
+        REQUIRE(event);
+        const auto* go = rfl::get_if<wcp::GotoDeclaration>(&event->payload.get().variant());
+        REQUIRE(go);
+        CHECK(go->variable == "top.dut.sig");
+        CHECK(rfl::json::write(*parsed) == wire);
+    }
+
+    SECTION("AddDrivers and AddLoads events") {
+        const auto drivers = rfl::json::read<wcp::S2CMessage, rfl::NoExtraFields>(
+            R"({"type":"event","event":"add_drivers","variable":"top.a"})");
+        REQUIRE(drivers);
+        const auto* driversEv = rfl::get_if<wcp::Event>(&drivers->variant());
+        REQUIRE(driversEv);
+        const auto* addDrivers = rfl::get_if<wcp::AddDrivers>(&driversEv->payload.get().variant());
+        REQUIRE(addDrivers);
+        CHECK(addDrivers->variable == "top.a");
+
+        const auto loads = rfl::json::read<wcp::S2CMessage, rfl::NoExtraFields>(
+            R"({"type":"event","event":"add_loads","variable":"top.b"})");
+        REQUIRE(loads);
+        const auto* loadsEv = rfl::get_if<wcp::Event>(&loads->variant());
+        REQUIRE(loadsEv);
+        const auto* addLoads = rfl::get_if<wcp::AddLoads>(&loadsEv->payload.get().variant());
+        REQUIRE(addLoads);
+        CHECK(addLoads->variable == "top.b");
+    }
+
+    SECTION("Response message") {
+        const std::string wire = R"({"type":"response","command":"add_items"})";
+        auto parsed = rfl::json::read<wcp::S2CMessage, rfl::NoExtraFields>(wire);
+        REQUIRE(parsed);
+        const auto* resp = rfl::get_if<wcp::Response>(&parsed->variant());
+        REQUIRE(resp);
+        CHECK(resp->command == "add_items");
+        CHECK(rfl::json::write(*parsed) == wire);
     }
 }

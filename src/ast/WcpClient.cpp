@@ -320,37 +320,33 @@ void waves::WcpClient::runClient() {
         rfl::visit(
             [&](auto&& msg) {
                 using Type = std::decay_t<decltype(msg)>;
-                if constexpr (std::is_same<Type, wcp::Response>()) {
+                if constexpr (std::is_same_v<Type, wcp::Response>) {
                 }
-                else if constexpr (std::is_same<Type, wcp::Event>()) {
-                    auto s2cEvent = rfl::json::read<wcp::S2CEvent>(*message);
-                    if (!s2cEvent) {
-                        std::cerr << "WCP S2C event decode error" << std::endl;
-                        return;
-                    }
+                else if constexpr (std::is_same_v<Type, wcp::Event>) {
                     rfl::visit(
                         [&](auto&& event) {
-                            using Type = std::decay_t<decltype(event)>;
+                            using EventType = std::decay_t<decltype(event)>;
                             try {
-                                if constexpr (std::is_same<Type, wcp::WaveformsLoaded>()) {
+                                if constexpr (std::is_same_v<EventType, wcp::WaveformsLoaded>) {
                                     onWaveformsLoaded(event);
                                 }
-                                else if constexpr (std::is_same<Type, wcp::GotoDeclaration>()) {
+                                else if constexpr (std::is_same_v<EventType,
+                                                                  wcp::GotoDeclaration>) {
                                     onGotoDeclaration(event);
                                 }
-                                else if constexpr (std::is_same<Type, wcp::AddDrivers>()) {
+                                else if constexpr (std::is_same_v<EventType, wcp::AddDrivers>) {
                                     onAddDrivers(event);
                                 }
-                                else if constexpr (std::is_same<Type, wcp::AddLoads>()) {
+                                else if constexpr (std::is_same_v<EventType, wcp::AddLoads>) {
                                     onAddLoads(event);
                                 }
                             }
                             catch (const std::exception& e) {
-                                std::cerr << "WCP S2C Error: " << s2cEvent << " " << e.what()
+                                std::cerr << "WCP S2C Error: " << *message << " " << e.what()
                                           << '\n';
                             }
                         },
-                        *s2cEvent);
+                        msg.payload.get());
                 }
             },
             *s2cMessage);
