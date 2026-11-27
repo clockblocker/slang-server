@@ -280,7 +280,30 @@ add_subdirectory(external/slang)
 if(SLANG_SERVER_USE_SYSTEM_FMT AND NOT TARGET fmt::fmt)
   find_package(fmt REQUIRED)
 endif()
-add_subdirectory(external/reflect-cpp)
+set(REFLECTCPP_JSON
+    ON
+    CACHE BOOL "Enable JSON support in reflect-cpp" FORCE)
+set(REFLECTCPP_USE_BUNDLED_DEPENDENCIES
+    ON
+    CACHE BOOL "Use bundled dependencies in reflect-cpp" FORCE)
+set(REFLECTCPP_USE_VCPKG
+    OFF
+    CACHE BOOL "Disable vcpkg in reflect-cpp" FORCE)
+set(REFLECTCPP_BUILD_TESTS
+    OFF
+    CACHE BOOL "Don't build reflect-cpp tests" FORCE)
+set(REFLECTCPP_BUILD_BENCHMARKS
+    OFF
+    CACHE BOOL "Don't build reflect-cpp benchmarks" FORCE)
+set(REFLECTCPP_INSTALL
+    OFF
+    CACHE BOOL "Don't install reflect-cpp" FORCE)
+FetchContent_Declare(
+  reflectcpp
+  GIT_REPOSITORY https://github.com/clockblocker/reflect-cpp.git
+  GIT_TAG all-planned-prs
+  GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(reflectcpp)
 if(SLANG_SERVER_USE_SYSTEM_URIPARSER)
   # URI serialization relies on the length overflow checks added in 1.0.3.
   find_package(uriparser 1.0.3 CONFIG REQUIRED COMPONENTS char)
@@ -375,8 +398,9 @@ if(SLANG_SERVER_DEBUG)
   target_sources(slang_server_obj_lib PRIVATE src/debug/DocumentScan.cpp
                                               src/debug/WorkspaceScan.cpp)
 endif()
-target_include_directories(slang_server_obj_lib SYSTEM
-                           PRIVATE external/reflect-cpp/include)
+target_include_directories(
+  slang_server_obj_lib SYSTEM
+  PRIVATE $<TARGET_PROPERTY:reflectcpp,INTERFACE_INCLUDE_DIRECTORIES>)
 
 target_precompile_headers(slang_server_obj_lib PRIVATE
                           "${PROJECT_SOURCE_DIR}/include/lsp/LspTypes.h")
@@ -415,8 +439,9 @@ set_target_properties(slang_server PROPERTIES OUTPUT_NAME "slang-server")
 # Build the gen_config_schema tool (standalone tool to generate config schema)
 add_executable(gen_config_schema src/gen_config_main.cpp)
 target_include_directories(gen_config_schema PRIVATE include)
-target_include_directories(gen_config_schema SYSTEM
-                           PRIVATE external/reflect-cpp/include)
+target_include_directories(
+  gen_config_schema SYSTEM
+  PRIVATE $<TARGET_PROPERTY:reflectcpp,INTERFACE_INCLUDE_DIRECTORIES>)
 target_link_libraries(gen_config_schema PRIVATE reflectcpp)
 
 if(SLANG_SERVER_COVERAGE)
