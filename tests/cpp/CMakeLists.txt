@@ -11,9 +11,6 @@ add_executable(server_unittests ${TEST_UTILS} main.cpp ${SERVER_TESTS})
 
 target_link_libraries(server_unittests PRIVATE slang_server_obj_lib)
 
-target_include_directories(
-  server_unittests SYSTEM
-  PRIVATE $<TARGET_PROPERTY:reflectcpp,INTERFACE_INCLUDE_DIRECTORIES>)
 target_link_libraries(server_unittests PRIVATE reflectcpp)
 
 target_link_libraries(server_unittests PRIVATE slang::slang Catch2::Catch2)

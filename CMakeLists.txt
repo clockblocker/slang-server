@@ -337,10 +337,9 @@ else()
   endif()
 endif()
 
-# Suppress warnings in reflect-cpp library
+# Enable exceptions for reflect-cpp library (needed when exceptions are disabled globally, e.g. WASI)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(reflectcpp PRIVATE -Wno-missing-field-initializers
-                                            -Wno-unused-parameter -fexceptions)
+  target_compile_options(reflectcpp PRIVATE -fexceptions)
 endif()
 
 # Generate version header
@@ -399,7 +398,7 @@ if(SLANG_SERVER_DEBUG)
                                               src/debug/WorkspaceScan.cpp)
 endif()
 target_include_directories(
-  slang_server_obj_lib SYSTEM
+  slang_server_obj_lib
   PRIVATE $<TARGET_PROPERTY:reflectcpp,INTERFACE_INCLUDE_DIRECTORIES>)
 
 target_precompile_headers(slang_server_obj_lib PRIVATE
@@ -439,9 +438,6 @@ set_target_properties(slang_server PROPERTIES OUTPUT_NAME "slang-server")
 # Build the gen_config_schema tool (standalone tool to generate config schema)
 add_executable(gen_config_schema src/gen_config_main.cpp)
 target_include_directories(gen_config_schema PRIVATE include)
-target_include_directories(
-  gen_config_schema SYSTEM
-  PRIVATE $<TARGET_PROPERTY:reflectcpp,INTERFACE_INCLUDE_DIRECTORIES>)
 target_link_libraries(gen_config_schema PRIVATE reflectcpp)
 
 if(SLANG_SERVER_COVERAGE)
