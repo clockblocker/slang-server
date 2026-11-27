@@ -28,7 +28,7 @@
 #define RFL_INFO(some_struct)                                      \
     fmt::print(stderr, "{}\n",                                     \
                rfl::json::write<rfl::UnderlyingEnums>(some_struct, \
-                                                      YYJSON_WRITE_PRETTY_TWO_SPACES));
+                                                      rfl::json::pretty_two_spaces));
 
 class ScopedTimer {
 public:
