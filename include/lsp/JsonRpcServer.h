@@ -27,13 +27,44 @@
 
 namespace lsp {
 
+static_assert(kJsonRpcParseError == static_cast<int32_t>(ErrorCodes::ParseError));
+static_assert(kJsonRpcInvalidRequest == static_cast<int32_t>(ErrorCodes::InvalidRequest));
+
+class RpcParamsError : public std::runtime_error {
+public:
+    RpcParamsError(ErrorCodes code, const std::string& message) :
+        std::runtime_error(message), m_code(code) {}
+
+    ErrorCodes code() const noexcept { return m_code; }
+
+private:
+    ErrorCodes m_code;
+};
+
+inline ErrorCodes mapParamsErrorCode(rfl::ErrorKind kind) noexcept {
+    switch (kind) {
+        case rfl::ErrorKind::syntax_error:
+            return ErrorCodes::ParseError;
+        case rfl::ErrorKind::missing_field:
+        case rfl::ErrorKind::unknown_field:
+        case rfl::ErrorKind::duplicate_field:
+        case rfl::ErrorKind::invalid_length:
+        case rfl::ErrorKind::invalid_type:
+        case rfl::ErrorKind::invalid_value:
+        case rfl::ErrorKind::constraint_violation:
+            return ErrorCodes::InvalidParams;
+        default:
+            return ErrorCodes::InternalError;
+    }
+}
+
 template<typename Impl>
 class JsonRpcServer {
 protected:
     std::unordered_map<std::string,
-                       std::function<rfl::Generic(rfl::Generic, const RequestContext&)>>
+                       std::function<rfl::json::Raw(const Params_t&, const RequestContext&)>>
         requests;
-    std::unordered_map<std::string, std::function<void(rfl::Generic, const RequestContext&)>>
+    std::unordered_map<std::string, std::function<void(const Params_t&, const RequestContext&)>>
         notifications;
 
     template<typename P, typename R, auto Method>
@@ -46,13 +77,16 @@ protected:
         if constexpr (acceptsContext)
             cancellableMethods.emplace(name);
 
-        requests[name] = [this](std::optional<rfl::Generic> paramsJson,
-                                const RequestContext& ctx) -> rfl::Generic {
+        requests[name] = [this](const Params_t& paramsJson,
+                                const RequestContext& ctx) -> rfl::json::Raw {
             auto getResult = [&]() -> R {
                 if constexpr (!std::is_same_v<P, std::nullopt_t>) {
-                    auto params = rfl::from_generic<P, rfl::UnderlyingEnums>(paramsJson.value());
+                    if (!paramsJson)
+                        throw RpcParamsError(ErrorCodes::InvalidParams, "Missing required params");
+                    auto params = rfl::json::read<P, rfl::UnderlyingEnums>(paramsJson->str());
                     if (!params)
-                        throw std::runtime_error(params.error().what());
+                        throw RpcParamsError(mapParamsErrorCode(params.error().kind()),
+                                             params.error().what());
 
                     if constexpr (std::is_invocable_v<decltype(Method), Impl*, P&,
                                                       const RequestContext&>) {
@@ -75,10 +109,10 @@ protected:
 
             if constexpr (std::is_same_v<R, std::monostate>) {
                 getResult();
-                return std::nullopt;
+                return rfl::json::Raw{};
             }
             else {
-                return rfl::to_generic<rfl::UnderlyingEnums>(getResult());
+                return rfl::json::Raw{rfl::json::write<rfl::UnderlyingEnums>(getResult())};
             }
         };
     }
@@ -93,12 +127,14 @@ protected:
         if constexpr (acceptsContext)
             cancellableMethods.emplace(name);
 
-        notifications[name] = [this](std::optional<rfl::Generic> paramsJson,
-                                     const RequestContext& ctx) {
+        notifications[name] = [this](const Params_t& paramsJson, const RequestContext& ctx) {
             if constexpr (!std::is_same_v<P, std::nullopt_t>) {
-                auto params = rfl::from_generic<P, rfl::UnderlyingEnums>(paramsJson.value());
+                if (!paramsJson)
+                    throw RpcParamsError(ErrorCodes::InvalidParams, "Missing required params");
+                auto params = rfl::json::read<P, rfl::UnderlyingEnums>(paramsJson->str());
                 if (!params)
-                    throw std::runtime_error(params.error().what());
+                    throw RpcParamsError(mapParamsErrorCode(params.error().kind()),
+                                         params.error().what());
 
                 if constexpr (std::is_invocable_v<decltype(Method), Impl*, P&,
                                                   const RequestContext&>) {
@@ -129,8 +165,8 @@ protected:
         if (request.method != "textDocument/didChange" || !request.params)
             return std::nullopt;
 
-        auto params = rfl::from_generic<DidChangeTextDocumentParams, rfl::UnderlyingEnums>(
-            *request.params);
+        auto params = rfl::json::read<DidChangeTextDocumentParams, rfl::UnderlyingEnums>(
+            request.params->str());
         if (!params)
             return std::nullopt;
         return params->textDocument.uri.str();
@@ -206,9 +242,9 @@ protected:
         ctx.info("Started {}", ctx.method());
     }
 
-    std::variant<rfl::Generic, RpcError, std::nullopt_t> processMessage(RpcRequest request,
-                                                                        RequestContext ctx = {},
-                                                                        bool logStart = true) {
+    std::variant<rfl::json::Raw, RpcError, std::nullopt_t> processMessage(RpcRequest request,
+                                                                          RequestContext ctx = {},
+                                                                          bool logStart = true) {
         struct MessageLog {
             explicit MessageLog(RequestContext ctx, bool logStart) :
                 ctx(std::move(ctx)), enabled(this->ctx.method() != "$/cancelRequest") {
@@ -258,10 +294,7 @@ protected:
             if (it != notifications.end()) {
                 MessageLog messageLog(ctx, logStart);
                 try {
-                    if (request.params)
-                        it->second(*request.params, messageLog.ctx);
-                    else
-                        it->second(std::nullopt, messageLog.ctx);
+                    it->second(request.params, messageLog.ctx);
 
                     messageLog.ctx.throwIfCancelled("before completion");
                 }
@@ -293,11 +326,7 @@ protected:
         try {
             startRequest(messageLog.ctx);
 
-            rfl::Generic response;
-            if (request.params)
-                response = it->second(*request.params, messageLog.ctx);
-            else
-                response = it->second(rfl::Generic{}, messageLog.ctx);
+            rfl::json::Raw response = it->second(request.params, messageLog.ctx);
 
             messageLog.ctx.throwIfCancelled("before response");
             return response;
@@ -311,6 +340,10 @@ protected:
             messageLog.setError(e.what());
             return RpcError{.code = static_cast<int>(LSPErrorCodes::RequestFailed),
                             .message = e.what()};
+        }
+        catch (const RpcParamsError& e) {
+            messageLog.setError(e.what());
+            return RpcError{.code = static_cast<int>(e.code()), .message = e.what()};
         }
         catch (const std::exception& e) {
             messageLog.setError(e.what());
@@ -332,7 +365,7 @@ protected:
         std::visit(
             [request](auto&& value) {
                 using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, rfl::Generic>) {
+                if constexpr (std::is_same_v<T, rfl::json::Raw>) {
                     sendMessage(RpcResponse{
                         .jsonrpc = "2.0",
                         .id = request.id,

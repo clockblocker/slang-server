@@ -111,18 +111,15 @@ private:
     }
 
 public:
-    virtual void setConfig(const Config& params) {
-        lsp::sendNotification("slang/setConfig", rfl::to_generic(params));
-    }
+    virtual void setConfig(const Config& params) { lsp::sendNotification("slang/setConfig", params); }
 
     std::monostate getClientRegisterCapability(const lsp::RegistrationParams& params) override {
-        lsp::sendRequest("client/registerCapability",
-                         rfl::to_generic<rfl::UnderlyingEnums>(params));
+        lsp::sendRequest<rfl::UnderlyingEnums>("client/registerCapability", params);
         return std::monostate{};
     }
 
     virtual void onActiveInstanceChanged(const ActivateInstanceParams& params) {
-        lsp::sendNotification("slang/activeInstanceChanged", rfl::to_generic(params));
+        lsp::sendNotification("slang/activeInstanceChanged", params);
     }
 
     lsp::Command makeActivateInstanceCommand(std::string title, std::string tooltip,

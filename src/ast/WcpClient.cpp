@@ -9,8 +9,6 @@
 #include "ast/WcpClient.h"
 
 #include "fmt/format.h"
-#include "rfl/UnderlyingEnums.hpp"
-#include "rfl/to_generic.hpp"
 #include "wcp/WcpTypes.h"
 #include <algorithm>
 #include <cerrno>
@@ -252,11 +250,11 @@ void waves::WcpClient::greet() {
     std::cerr << "WCP connection established" << std::endl;
 
     // Send greeting
-    sendMessage(rfl::to_generic<rfl::UnderlyingEnums>(wcp::Greeting{
+    sendMessage(wcp::Greeting{
         .type = "greeting",
         .version = "0",
         .commands = {"waveforms_loaded", "goto_declaration", "add_drivers", "add_loads"},
-    }));
+    });
 
     // Receive greeting
     std::optional<std::string> s2cGreeting;
@@ -370,34 +368,34 @@ void waves::WcpClient::onGotoDeclaration(const wcp::GotoDeclaration& gotoDeclara
 }
 
 void waves::WcpClient::onAddDrivers(const wcp::AddDrivers& addDrivers) {
-    sendMessage(rfl::to_generic<rfl::UnderlyingEnums>(wcp::AddVariables{
+    sendMessage(wcp::AddVariables{
         .type = "command",
         .command = "add_variables",
         .variables = m_lspServer->getDrivers(addDrivers.variable),
-    }));
+    });
 }
 
 void waves::WcpClient::onAddLoads(const wcp::AddLoads& addLoads) {
-    sendMessage(rfl::to_generic<rfl::UnderlyingEnums>(wcp::AddVariables{
+    sendMessage(wcp::AddVariables{
         .type = "command",
         .command = "add_variables",
         .variables = m_lspServer->getLoads(addLoads.variable),
-    }));
+    });
 }
 
 void waves::WcpClient::addItem(const waves::ItemToWaveform& params) {
-    sendMessage(rfl::to_generic<rfl::UnderlyingEnums>(wcp::AddItems{
+    sendMessage(wcp::AddItems{
         .type = "command",
         .command = "add_items",
         .items = {params.path},
         .recursive = params.recursive,
-    }));
+    });
 }
 
 void waves::WcpClient::loadWaveform(const std::string& source) {
-    sendMessage(rfl::to_generic<rfl::UnderlyingEnums>(wcp::Load{
+    sendMessage(wcp::Load{
         .type = "command",
         .command = "load",
         .source = source,
-    }));
+    });
 }

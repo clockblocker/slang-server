@@ -9,18 +9,32 @@
 #pragma once
 
 #include "JsonTypes.h"
-#include "rfl/Generic.hpp"
 #include <charconv>
+#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <rfl/json.hpp> // IWYU pragma: keep
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <variant>
 
 namespace lsp {
 
 using ID_t = std::variant<int, std::string>;
-using Params_t = std::optional<rfl::Generic>;
+using Params_t = std::optional<rfl::json::Raw>;
+
+inline constexpr int32_t kJsonRpcParseError = -32700;
+inline constexpr int32_t kJsonRpcInvalidRequest = -32600;
+
+inline int32_t mapRequestErrorCode(rfl::ErrorKind kind) noexcept {
+    switch (kind) {
+        case rfl::ErrorKind::syntax_error:
+            return kJsonRpcParseError;
+        default:
+            return kJsonRpcInvalidRequest;
+    }
+}
 
 struct RpcRequest {
     /// includes notifications
@@ -62,27 +76,39 @@ void sendMessage(const T& message) {
     std::cout.flush();
 }
 
-inline void sendNotification(const std::string& method, const rfl::Generic& params) {
+inline void sendNotification(const std::string& method, rfl::json::Raw params) {
     sendMessage(RpcNotification{
         .jsonrpc = "2.0",
         .method = method,
-        .params = params,
+        .params = std::move(params),
     });
     std::cerr << "---> " << method;
-    // std::cerr << ": " << rfl::json::write(params) << std::endl;
+    // std::cerr << ": " << params.str() << std::endl;
     std::cerr << std::endl;
 }
 
-inline void sendRequest(const std::string& method, const rfl::Generic& params) {
+template<class... Ps, typename T>
+    requires(!std::is_same_v<std::remove_cvref_t<T>, rfl::json::Raw>)
+inline void sendNotification(const std::string& method, const T& params) {
+    sendNotification(method, rfl::json::Raw{rfl::json::write<Ps...>(params)});
+}
+
+inline void sendRequest(const std::string& method, rfl::json::Raw params) {
     sendMessage(RpcRequest{
         .jsonrpc = "2.0",
         .id = 0,
         .method = method,
-        .params = params,
+        .params = std::move(params),
     });
     std::cerr << "---> " << method;
-    // std::cerr << ": " << rfl::json::write(params) << std::endl;
+    // std::cerr << ": " << params.str() << std::endl;
     std::cerr << std::endl;
+}
+
+template<class... Ps, typename T>
+    requires(!std::is_same_v<std::remove_cvref_t<T>, rfl::json::Raw>)
+inline void sendRequest(const std::string& method, const T& params) {
+    sendRequest(method, rfl::json::Raw{rfl::json::write<Ps...>(params)});
 }
 
 template<typename T>
@@ -130,7 +156,7 @@ std::optional<T> readJson(std::string& line, std::string& content) {
                 RpcErrorResponse{.jsonrpc = "2.0",
                                  .id = 0,
                                  .error = RpcError{
-                                     .code = 1,
+                                     .code = mapRequestErrorCode(request.error().kind()),
                                      .message = "Error parsing JSON: " + request.error().what() +
                                                 " for content: " + content,
                                  }});
